@@ -1,0 +1,187 @@
+repos:
+  - name: mocachain
+    path: .
+    role: workspace coordination repo for routing docs, task notes, and multi-repo scripts
+    present: true
+    entry: mocachain.code-workspace
+    contracts:
+      provides:
+        - workspace-routing-docs
+        - workspace-manifest
+      consumes: []
+  - name: moca
+    path: ../../../github/mocachain/moca
+    role: core Moca blockchain implementation and mocad node
+    present: true
+    entry: cmd/mocad
+    contracts:
+      provides:
+        - moca-node-api
+      consumes:
+        - forked-cosmos-sdk
+        - forked-cometbft
+        - forked-cometbft-db
+        - forked-iavl
+        - forked-go-ethereum
+  - name: moca-storage-provider
+    path: ../../../github/mocachain/moca-storage-provider
+    role: storage provider service, object storage gateway, and SP lifecycle implementation
+    present: true
+    entry: cmd
+    contracts:
+      provides:
+        - storage-provider-api
+      consumes:
+        - moca-node-api
+        - shared-go-libs
+        - forked-cosmos-sdk
+        - forked-cometbft
+        - forked-cometbft-db
+        - forked-iavl
+        - forked-ibc
+        - forked-go-ethereum
+  - name: moca-cmd
+    path: ../../../github/mocachain/moca-cmd
+    role: operator and test CLI for chain and storage workflows
+    present: true
+    entry: cmd
+    contracts:
+      provides:
+        - operator-cli
+      consumes:
+        - moca-node-api
+        - storage-provider-api
+        - shared-go-libs
+        - forked-cosmos-sdk
+        - forked-cometbft
+        - forked-cometbft-db
+        - forked-iavl
+        - forked-ibc
+        - forked-go-ethereum
+  - name: moca-common
+    path: ../../../github/mocachain/moca-common
+    role: shared Go utility library used across Moca repos
+    present: true
+    entry: go
+    contracts:
+      provides:
+        - shared-go-libs
+      consumes: []
+  - name: moca-cosmos-sdk
+    path: ../../../github/mocachain/moca-cosmos-sdk
+    role: Moca fork of cosmos-sdk
+    present: true
+    entry: x
+    contracts:
+      provides:
+        - forked-cosmos-sdk
+      consumes: []
+  - name: moca-cometbft
+    path: ../../../github/mocachain/moca-cometbft
+    role: Moca fork of CometBFT
+    present: true
+    entry: cmd/cometbft
+    contracts:
+      provides:
+        - forked-cometbft
+      consumes: []
+  - name: moca-cometbft-db
+    path: ../../../github/mocachain/moca-cometbft-db
+    role: Moca fork of CometBFT DB
+    present: true
+    entry: Makefile
+    contracts:
+      provides:
+        - forked-cometbft-db
+      consumes: []
+  - name: moca-iavl
+    path: ../../../github/mocachain/moca-iavl
+    role: Moca fork of IAVL state tree
+    present: true
+    entry: cmd
+    contracts:
+      provides:
+        - forked-iavl
+      consumes: []
+  - name: moca-ibc-go
+    path: ../../../github/mocachain/moca-ibc-go
+    role: Moca fork of ibc-go
+    present: true
+    entry: modules
+    contracts:
+      provides:
+        - forked-ibc
+      consumes: []
+  - name: moca-juno
+    path: ../../../github/mocachain/moca-juno
+    role: chain indexer and exporter
+    present: true
+    entry: cmd/juno
+    contracts:
+      provides:
+        - indexer-pipeline
+      consumes:
+        - moca-node-api
+  - name: moca-callisto
+    path: ../../../github/mocachain/moca-callisto
+    role: Moca-specific indexer and query layer on top of Juno-style ingestion
+    present: true
+    entry: cmd/bdjuno
+    contracts:
+      provides:
+        - indexer-pipeline
+      consumes:
+        - moca-node-api
+  - name: moca-callisto-juno
+    path: ../../../github/mocachain/moca-callisto-juno
+    role: Juno fork used by Callisto
+    present: true
+    entry: cmd/juno
+    contracts:
+      provides:
+        - indexer-pipeline
+      consumes:
+        - moca-node-api
+  - name: moca-devcontainer
+    path: ../../../github/mocachain/moca-devcontainer
+    role: local and multi-environment docker test environment
+    present: true
+    entry: localnet
+    contracts:
+      provides:
+        - local-docker-topology
+      consumes:
+        - moca-node-api
+        - storage-provider-api
+        - operator-cli
+  - name: moca-e2e
+    path: ../../../github/mocachain/moca-e2e
+    role: cross-repo integration testing hub with known-good stack pointer
+    present: true
+    entry: stack.yaml
+    contracts:
+      provides:
+        - known-good-stack
+      consumes:
+        - moca-node-api
+        - storage-provider-api
+        - operator-cli
+        - indexer-pipeline
+  - name: go-ethereum
+    path: ../../../github/mocachain/go-ethereum
+    role: Moca fork of go-ethereum used by core repos
+    present: true
+    entry: README.md
+    contracts:
+      provides:
+        - forked-go-ethereum
+      consumes: []
+  - name: moca-go-sdk
+    path: ../../../github/mocachain/moca-go-sdk
+    role: Go SDK consumed by CLI and storage provider repos
+    present: true
+    entry: README.md
+    contracts:
+      provides:
+        - shared-go-libs
+      consumes: []

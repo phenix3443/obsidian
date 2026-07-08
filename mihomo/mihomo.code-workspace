@@ -1,0 +1,20 @@
+{
+  "folders": [
+    {
+      "name": "obsidian",
+      "path": "..",
+    },
+    {
+      "name": "clash",
+      "path": "../../../womenlia/clash",
+    },
+    {
+      "name": "clash-rules",
+      "path": "../../clash-rules",
+    },
+    {
+      "path": "../../mihctl",
+    },
+  ],
+  "settings": {},
+}

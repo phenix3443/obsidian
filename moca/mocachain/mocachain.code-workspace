@@ -1,0 +1,73 @@
+{
+  "folders": [
+    {
+      "name": "obsidian",
+      "path": "..",
+    },
+    {
+      "name": "go-ethereum",
+      "path": "../../../../mocachain/go-ethereum",
+    },
+    {
+      "name": "moca",
+      "path": "../../../../mocachain/moca",
+    },
+    {
+      "name": "moca-storage-provider",
+      "path": "../../../../mocachain/moca-storage-provider",
+    },
+    {
+      "name": "moca-cmd",
+      "path": "../../../../mocachain/moca-cmd",
+    },
+    {
+      "name": "moca-cometbft",
+      "path": "../../../../mocachain/moca-cometbft",
+    },
+    {
+      "name": "moca-cometbft-db",
+      "path": "../../../../mocachain/moca-cometbft-db",
+    },
+    {
+      "name": "moca-common",
+      "path": "../../../../mocachain/moca-common",
+    },
+    {
+      "name": "moca-cosmos-sdk",
+      "path": "../../../../mocachain/moca-cosmos-sdk",
+    },
+    {
+      "name": "moca-go-sdk",
+      "path": "../../../../mocachain/moca-go-sdk",
+    },
+    {
+      "name": "moca-iavl",
+      "path": "../../../../mocachain/moca-iavl",
+    },
+    {
+      "name": "moca-ibc-go",
+      "path": "../../../../mocachain/moca-ibc-go",
+    },
+    {
+      "name": "moca-juno",
+      "path": "../../../../mocachain/moca-juno",
+    },
+    {
+      "name": "moca-callisto",
+      "path": "../../../../mocachain/moca-callisto",
+    },
+    {
+      "name": "moca-callisto-juno",
+      "path": "../../../../mocachain/moca-callisto-juno",
+    },
+    {
+      "name": "moca-devcontainer",
+      "path": "../../../../mocachain/moca-devcontainer",
+    },
+    {
+      "name": "moca-e2e",
+      "path": "../../../../mocachain/moca-e2e",
+    },
+  ],
+  "settings": {},
+}
