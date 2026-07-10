@@ -2,7 +2,7 @@
   "folders": [
     {
       "name": "obsidian",
-      "path": "..",
+      "path": ".",
     },
     {
       "name": "clash",
@@ -13,6 +13,7 @@
       "path": "../../clash-rules",
     },
     {
+      "name": "mihctl",
       "path": "../../mihctl",
     },
   ],
