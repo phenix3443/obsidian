@@ -19,10 +19,13 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-issues.md"
 ---
 
 > [!summary]
-> 将“把当前预编译合约实现方式改成 `cosmos/evm` 原生模式”的总任务，拆分为一组可独立推进、可验证、尽量 AFK 的子任务。
+> 将“把当前预编译合约实现方式改成 `cosmos/evm` 原生模式”的总任务，拆分为一组可独立推进、可验证、尽量 AFK 的子任务。本页已按实际落地情况回写：**原生模式迁移由 PR #332 完成（且顺带修了一个正在生效的原生币通胀漏洞），已合入 `main`；测试与文档在 `precompile-integration-v2`（=main+我们的增量）上补齐，汇总为 PR #349（→ main，就绪待合），含 bank/staking/payment 三个已验证的通胀回归守卫、bank/storage characterization、架构文档、balance-handler 完整性审计；caller 语义变更（去 EOA-only / direct-caller / 链升级）有意推迟，尚未做。**
+
+> [!note]
+> **进度快照（2026-07-14）**：#332 已入 main；#349（我们的测试/文档增量）OPEN 指向 main、无冲突、待人工合并。后续开发（其余动币守卫、7702 e2e、gated direct-caller）暂缓。
 
 > [!info]
-> 长期有效的项目级知识已沉淀到 [[core/Precompile Architecture|Precompile Architecture]]。当前页保留任务拆分、执行边界和阶段依赖。
+> 长期有效的项目级知识已沉淀到 [[core/Precompile Architecture|Precompile Architecture]]。当前页保留任务拆分、执行边界、阶段依赖，以及落地现状。
 
 ## Navigation
 - [[Tasks Index]]
@@ -35,281 +38,114 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-issues.md"
 
 # Moca 预编译合约切换到 Cosmos EVM 原生模式子任务拆分
 
-## 拆分原则
+## 落地现状（2026-07，按实际回写）
 
-本拆分遵循以下原则：
+原生模式迁移**没有沿用本页最初设想的多子任务路线**，而是收敛到了同事 puneet2019 的 **PR #332**：
 
-- 每个子任务尽量是一个可验证的垂直切片，而不是纯横向重构
-- 每个子任务完成后，应至少能独立通过一组针对性测试
-- 尽量优先 AFK 子任务，减少必须停下来等设计确认的节点
-- 对 caller 语义风险高的部分，先通过“运行时模型对齐”把基础设施收敛，再进入业务身份切换
+- **#332** 把 **11 个 precompile 全部内嵌 `cosmos/evm` 的 `cmn.Precompile` 并走 `RunNativeAction`**，全部接 `BalanceHandlerFactory`，计量真实 store gas。
+- 关键：#332 **不只是迁移，还修了一个正在生效的原生币通胀漏洞**——旧的 `GetCacheContext→keeper写→commit` 模式只改 bank store、不同步 EVM StateDB stateObject 余额；配合 EIP-7702，攻击者可让 EOA 变成带旧余额的 dirty stateObject，`StateDB.Commit` 对账时把扣掉的钱铸回，**每块可重复，+90 MOCA/次**。本页最初的拆分**没有识别出这个漏洞**（只提到 value-reject 和 balance-sync 风险）。
+- 我们这边原本平行做了一版迁移（含一个 `base` 封装包），但它**冗余且缺安全核心**（只给 bank 接了 BalanceHandler），已放弃，改为**以 #332 为基座**。
 
-## 子任务列表
+集成分支：**`precompile-integration-v2` = #332 + 我们续的测试/文档**：
 
-### 0. 建立迁移前测试基线
+| PR | 内容 |
+|---|---|
+| **#332**（基座） | 11 个 precompile 迁到 `RunNativeAction`，全接 BalanceHandler，修通胀，计量 gas，**保留 EOA-only** |
+| **#346** | bank 回归测试：`TestBankSend_NoSupplyInflation`（通胀不变量）+ dispatch + 原生 revert |
+| **#347** | storage createGroup 回归：dispatch / EOA-only / 失败干净回滚 |
+| **#348** | `x/evm/precompiles/README.md` 架构文档 |
 
-- **Title**: 建立迁移前测试基线
-- **Type**: AFK
-- **Blocked by**: None - should happen before runtime refactor
-- **User stories covered**:
-  - 作为迁移执行者，我需要先把当前 precompile 行为冻结成回归测试，避免重写运行时后静默改变语义
-  - 作为审计者，我需要在迁移前就看到 caller、回滚、value-reject、dispatch 这些高风险路径的明确断言
+## 子任务状态一览
 
-**What to build**
+| 子任务 | 状态 | 落地 / 说明 |
+|---|---|---|
+| 0 迁移前测试基线 | 🟡 部分 | bank（含通胀）+ storage createGroup 回归已加；storageprovider 用 #332 自带 dispatch 测试；未铺满全部 11 个 |
+| 1 原生运行时基座 | ✅ | #332。**偏差**：直接内嵌 `cmn.Precompile`，而非本页说的“新增 moca `base` 包”——目标（统一运行时、去手写模板）达成，形式不同 |
+| 2 bank 迁移 | ✅ | #332 |
+| 3 storage 系列（storage/payment/storageprovider/virtualgroup） | ✅ | #332 |
+| 4 治理/系统（authz/gov/staking/distribution/slashing/permission） | ✅ | #332 |
+| 5 内部 keeper 调用层 | ✅ | #332 未动 `x/storage/keeper/evm.go`，验证兼容（createGroup 内部 CallEVM 走通） |
+| 6 清 EOA-only / direct-caller | ❌ 未做（有意推迟，HITL） | #332 **特意保留 EOA-only**，合约仍不能调 precompile。见下“为什么做 subtask 6” |
+| 7 全量测试 + 文档 | 🟡 部分 | 文档 #348 已加；测试缺 contract-caller（属 subtask 6）与其余动币模块的通胀守卫 |
+| 8 caller 语义链升级 | ❌ 未做（HITL） | 依赖 subtask 6 |
 
-在不改变现有 precompile 代码行为的前提下，先补一组迁移前 `characterization tests`，优先覆盖：
+对照原计划 8 条“完成标准”：①原生模式 ②去手写模板 ⑥保留 RejectValue ⑦测试通过 → ✅；③去 EOA-only ④合约可调 ⑧链升级 → ❌；⑤caller/msg/事件文档+测试 → 🟡。**约 4.5 / 8。**
 
-- `bank`：`RejectValue(contract)`、`EOA-only`、至少 1 条经过 `EvmKeeper` 的真实 dispatch 路径、至少 1 条余额副作用校验
-- `storageprovider`：保留并扩展现有 EVM apply 测试，补 caller / revert 语义
-- `storage`：至少选 1 个代表性交易型方法，覆盖 `EOA-only`、dispatch、失败回滚
+---
 
-这一任务的目标不是一次性补齐所有模块，而是先把后续运行时迁移最容易打坏的行为固定下来。
+## 为什么要做“清理 EOA-only 限制并引入合约调用支持”（subtask 6）
 
-**Acceptance criteria**
+这**本质是产品决策，不是技术必然**，回写时把它讲清楚：
 
-- [ ] `bank`、`storageprovider`、`storage` 至少各有一组迁移前基线测试
-- [ ] 明确覆盖当前“EOA 直调成功、contract 转调失败”的历史行为
-- [ ] 明确覆盖 `RejectValue(contract)` 与 readonly / revert 中至少两类关键保护语义
-- [ ] 至少一组测试真正通过 `EvmKeeper` 触发 static precompile dispatch，而不是只测 ABI decode
+**EOA-only 现在拦住的**：任何**智能合约都不能调**用 bank/staking/gov/storage 等 precompile，只有 EOA 直接发交易能调。
 
-### 1. 建立 Moca 预编译原生运行时基座
+**为什么这是问题**：precompile 存在的意义就是让 EVM 合约与 Cosmos 模块组合。EOA-only 等于把 precompile 变成“只能 CLI/钱包直连”，合约层用不了——写不了帮用户 `delegate` 的 DeFi 合约、代成员 `gov.vote` 的 DAO 合约、管理 bucket / 转账的合约。放开合约调用 = 让 precompile 真正可组合，这是有 precompile 的**初衷**。
 
-- **Title**: 建立 Moca 预编译原生运行时基座
-- **Type**: AFK
-- **Blocked by**:
-  - 建立迁移前测试基线
-- **User stories covered**:
-  - 作为链开发者，我需要一个统一的 precompile 运行时骨架，避免每个模块手写 `Run/cacheCtx/snapshot/commit`
-  - 作为后续迁移任务的执行者，我需要一个可复用的 base 层来承接 `cosmos/evm` 原生模式
+**EOA-only 当初为什么存在**：很可能就是个**安全闸**——因为余额对账是坏的（就是 #332 修的通胀漏洞），先用 EOA-only 限制爆炸半径。**#332 修好根因后，这个安全理由大幅减弱。**
 
-**What to build**
+**结论**：
+- 若 moca 要合约可组合性 → EOA-only 必须去，这是 subtask 6 的正当理由；
+- 若只要 EOA 通过 EVM 交易访问 Cosmos 模块 → EOA-only 可留，subtask 6 可不做。
+- 原计划**默认了要 direct-caller**，那是个假设，需产品确认。
+- 即便要做，#332 只移除了**通胀**这一个阻碍；放开后每个 precompile 的**授权语义**（谁能代谁做敏感操作）仍需逐个审。
 
-在 `moca/x/evm/precompiles/` 下建立统一的 Moca precompile 基座，薄封装 `cosmos/evm/precompiles/common.Precompile` 的运行方式，用于后续模块迁移。该任务不要求一次性迁移全部业务模块，但要提供足够稳定的公共入口，覆盖：
+---
 
-- `Run -> RunNativeAction -> Execute` 的统一执行骨架
-- ABI setup / tx-query 分流 helper
-- 统一的 revert / gas / readonly 处理约定
-- 保留 `RejectValue(contract)` 作为所有 precompile 的公共前置校验
+## 6. 清理 EOA-only 限制并引入合约调用支持（未做，HITL）
 
-**Acceptance criteria**
+- **Type**: HITL — 需产品确认是否要合约可组合性
+- **Blocked by**: 上游 #332 合入 main（作为基座）
+- **前置澄清**：#332 已修通胀根因、并**保留** EOA-only；本子任务是在其之上把 EOA-only 改掉
 
-- [ ] `moca` 中新增统一的 precompile base 层，而不是继续复制每个模块自己的 `Run()` 模板
-- [ ] 公共层明确支持 `Execute(ctx, stateDB, contract, readonly)` 这一原生执行模式
-- [ ] 公共层保留对 nonzero native value 的统一拒绝
-- [ ] 至少有一组公共层单元测试覆盖基础执行流程或 helper 行为
+**What to build（若确认要做）**
 
-### 2. 将 bank precompile 迁移到原生模式
-
-- **Title**: 将 bank precompile 迁移到原生模式
-- **Type**: AFK
-- **Blocked by**:
-  - 建立迁移前测试基线
-  - 建立 Moca 预编译原生运行时基座
-- **User stories covered**:
-  - 作为链开发者，我需要一个代表性的官方模式 precompile 样板
-  - 作为后续任务执行者，我需要先验证余额同步和 tx/query 分流是否跑通
-
-**What to build**
-
-将 `bank` 预编译从当前自定义执行模型改到 `cosmos/evm` 原生模式，完整接入统一运行时基座，并验证：
-
-- query / tx 方法 ABI 分流
-- 余额变化是否通过官方 balance handler 模型同步回 `StateDB`
-- `RejectValue(contract)` 是否继续生效
-
-该任务不要求放开“合约调用”，可以先只完成运行时模型对齐。
+- 删除交易型 precompile 的 `evm.Origin != contract.Caller()`（“only allow EOA can call this method”）守卫
+- 业务身份取直接调用者 `contract.Caller()`；逐个 precompile 审 msg sender / operator / voter / delegator 授权语义
+- **务必与 subtask 8 绑定**：改成**有条件**守卫（升级高度前保留 EOA-only，升级后放开），不能像早先关掉的 #344 那样**无条件**删——那会在升级前就改变共识执行、且被同事标为 “opens for hack”
 
 **Acceptance criteria**
 
-- [ ] `bank` 不再使用当前手写 `Run()/GetCacheContext()/commit()` 模式
-- [ ] `bank` 改为通过统一基座执行
-- [ ] `bank` 对资金变化路径接入 balance handler 语义
-- [ ] `bank` 现有 query / tx 测试通过，并补充原生运行时路径测试
-
-### 3. 将 storage 系列预编译迁移到原生模式
-
-- **Title**: 将 storage 系列预编译迁移到原生模式
-- **Type**: AFK
-- **Blocked by**:
-  - 建立迁移前测试基线
-  - 建立 Moca 预编译原生运行时基座
-  - 将 bank precompile 迁移到原生模式
-- **User stories covered**:
-  - 作为链开发者，我需要将 Moca 最核心的 storage 业务 precompile 迁移到官方执行模型
-  - 作为审计者，我需要 storage 相关 precompile 的 StateDB / keeper 执行边界清晰一致
-
-**What to build**
-
-迁移 `storage`、`payment`、`storageprovider`、`virtualgroup` 这组 Moca 自定义业务最强的 precompile，使它们统一使用原生执行模型。重点是：
-
-- 统一 `Run/Execute`
-- 清理手写 cache / snapshot 逻辑
-- 验证是否存在需要额外补的 balance 同步路径
-
-**Acceptance criteria**
-
-- [ ] `storage`、`payment`、`storageprovider`、`virtualgroup` 都改为统一运行时模型
-- [ ] 不再各自维护复制粘贴式的 `Run()` 模板
-- [ ] 对涉及余额副作用的路径明确验证 balance sync 是否完整
-- [ ] 至少补一组 end-to-end 测试，证明 cosmos/evm static precompile dispatch 仍然生效
-
-### 4. 将治理与系统模块预编译迁移到原生模式
-
-- **Title**: 将治理与系统模块预编译迁移到原生模式
-- **Type**: AFK
-- **Blocked by**:
-  - 建立迁移前测试基线
-  - 建立 Moca 预编译原生运行时基座
-  - 将 bank precompile 迁移到原生模式
-- **User stories covered**:
-  - 作为链开发者，我需要让剩余系统类 precompile 的实现方式统一
-  - 作为维护者，我需要降低后续升级 `cosmos/evm` 时的兼容成本
-
-**What to build**
-
-迁移以下模块到原生模式：
-
-- `authz`
-- `gov`
-- `staking`
-- `distribution`
-- `slashing`
-- `permission`
-
-这组模块的重点不是余额同步，而是 tx/query 分流、只读语义、事件发射以及 caller 约束的未来统一。
-
-**Acceptance criteria**
-
-- [ ] 以上模块都切换到统一 precompile 运行时模型
-- [ ] 保持 ABI、query、event 基本兼容
-- [ ] 保留 `RejectValue(contract)` 和只读保护
-- [ ] 模块级测试覆盖 Execute 路径
-
-### 5. 重构内部 keeper 调用层以兼容原生 precompile 模型
-
-- **Title**: 重构内部 keeper 调用层以兼容原生 precompile 模型
-- **Type**: AFK
-- **Blocked by**:
-  - 建立迁移前测试基线
-  - 将 bank precompile 迁移到原生模式
-  - 将 storage 系列预编译迁移到原生模式
-- **User stories covered**:
-  - 作为链开发者，我需要 keeper 内部 EVM 调用继续在新模式下可用
-  - 作为维护者，我需要明确 `CallEVM/CallEVMWithData/stateDB/callFromPrecompile` 的边界
-
-**What to build**
-
-梳理并重构 `x/storage/keeper/evm.go` 及其相关 interface / mock，使 keeper 内部 EVM 调用与新的 precompile 执行模式兼容。重点关注：
-
-- `stateDB` 的创建与传递
-- `commit` 语义
-- `callFromPrecompile` 的传递边界
-- 内部系统调用与外部用户调用的差异
-
-**Acceptance criteria**
-
-- [ ] `x/storage/keeper/evm.go` 与新运行时模型兼容
-- [ ] 对应 `expected_keepers.go` / mocks 同步更新
-- [ ] storage keeper 相关测试继续通过
-- [ ] 内部 EVM 调用路径有明确测试覆盖
-
-### 6. 清理 EOA-only 限制并引入合约调用支持
-
-- **Title**: 清理 EOA-only 限制并引入合约调用支持
-- **Type**: HITL
-- **Blocked by**:
-  - 建立迁移前测试基线
-  - 将 bank precompile 迁移到原生模式
-  - 将 storage 系列预编译迁移到原生模式
-  - 将治理与系统模块预编译迁移到原生模式
-- **User stories covered**:
-  - 作为合约开发者，我希望合约能够直接调用 precompile
-  - 作为协议设计者，我需要明确 caller / msg sender 的最终语义
-
-**Why HITL**
-
-这是整个任务里最敏感的决策点，因为这里会从“EOA-only”切换到“允许合约调用”，并且需要最终确定：
-
-- 是短期兼容 `tx.origin`
-- 还是直接切到 `contract.Caller()` 原生语义
-
-当前总计划建议最终目标是 direct caller 原生语义，因此该任务默认按最终目标推进，但需要人工确认不会破坏外部集成预期。
-
-**What to build**
-
-删除所有交易型 precompile 中的 `EOA-only` 限制，并统一 caller 鉴权语义。默认目标：
-
-- 允许合约调用
-- 业务身份按 `contract.Caller()` 计算
-- Cosmos msg sender / operator / voter / delegator 与 direct caller 对齐
-
-**Acceptance criteria**
-
-- [ ] 交易型 precompile 不再通过 `evm.Origin != contract.Caller()` 拒绝合约调用
-- [ ] caller 语义在代码与文档中得到统一定义
+- [ ] 交易型 precompile 不再无条件用 EOA-only 拒绝合约调用；行为由升级高度 gate
+- [ ] caller 语义在代码与文档统一定义
 - [ ] 新增测试覆盖“EOA 直调”和“contract 转调”
-- [ ] 明确记录不再以 `tx.origin` 作为预编译权限主体
+- [ ] 逐 precompile 审授权语义，记录谁能代谁做敏感操作
+- [ ] 覆盖 `x/storage/keeper/evm.go` 内部 EVM 调用，证明系统调用边界不变
 
-### 7. 补齐全量测试与迁移文档
+## 7. 补齐全量测试与迁移文档（部分完成）
 
-- **Title**: 补齐全量测试与迁移文档
-- **Type**: AFK
-- **Blocked by**:
-  - 重构内部 keeper 调用层以兼容原生 precompile 模型
-  - 清理 EOA-only 限制并引入合约调用支持
-- **User stories covered**:
-  - 作为维护者，我需要完整测试矩阵证明迁移是安全的
-  - 作为后续升级执行者，我需要书面化的 precompile 架构与 caller 语义说明
+- **状态**: 文档 #348 完成；测试矩阵未齐
+- **已做**: bank 通胀/dispatch/revert（#346）、storage createGroup dispatch/EOA/revert（#347）、README（#348）
+- **待补**:
+  - [ ] 其余动币 precompile（staking.delegate / distribution.withdraw / gov.deposit / payment）的 total-supply 不变量守卫
+  - [ ] type-4（7702）端到端通胀复现回归（#332 建议的 CI 集成测试，较重）
+  - [ ] contract-caller 测试矩阵（随 subtask 6）
 
-**What to build**
+## 8. 准备并执行 caller 语义链升级（未做，HITL）
 
-完成整项迁移后的收口工作：
+- **Type**: HITL — 依赖 subtask 6
+- **Blocked by**: subtask 6
+- 早先关掉的 #345 有一份升级 handler 骨架 + 迁移文档草稿可复用；gating 机制（链上 param 开关 vs 升级高度）待定
+- “执行升级”本身（选高度、测试网 fork/replay、发迁移公告）是运维步骤，非 AFK
 
-- 完整测试矩阵
-- caller 语义文档
-- “继续拒绝 native value” 的安全说明
-- 预编译原生模式迁移说明
+---
 
-**Acceptance criteria**
+## 已放弃 / 已关闭
 
-- [ ] 覆盖 EOA、contract、readonly、revert、value-reject、nested-call 的测试矩阵齐全
-- [ ] 相关 lint / typecheck / test 全部通过
-- [ ] `moca` 内部新增或更新 precompile 架构说明文档
-- [ ] 迁移文档说明当前模式已从兼容层切换为 `cosmos/evm` 原生模式
+- 我们平行的一版迁移（含 `base` 包，subtask 1–4 的自实现）——被 #332 取代，放弃
+- **#344**（无条件删 EOA-only）——“opens for hack”，关闭；以后在 #332 之上做 gated 版
+- **#345**（升级骨架）——过早，关闭；草稿留作 subtask 8 参考
+- **#308**（最早的 bank 基线，pre-native 断言）——过时，关闭；由 #346 取代
 
-## 推荐依赖关系
+## 未决事项（需团队 / 产品定）
 
-推荐按以下顺序推进：
-
-1. 建立迁移前测试基线
-2. 建立 Moca 预编译原生运行时基座
-3. 将 bank precompile 迁移到原生模式
-4. 将 storage 系列预编译迁移到原生模式
-5. 将治理与系统模块预编译迁移到原生模式
-6. 重构内部 keeper 调用层以兼容原生 precompile 模型
-7. 清理 EOA-only 限制并引入合约调用支持
-8. 补齐全量测试与迁移文档
-
-## 建议发布顺序
-
-如果要进一步转成 issue，建议先发布 blocker：
-
-1. 建立迁移前测试基线
-2. 建立 Moca 预编译原生运行时基座
-3. 将 bank precompile 迁移到原生模式
-4. 将 storage 系列预编译迁移到原生模式
-5. 将治理与系统模块预编译迁移到原生模式
-6. 重构内部 keeper 调用层以兼容原生 precompile 模型
-7. 清理 EOA-only 限制并引入合约调用支持
-8. 补齐全量测试与迁移文档
-
-## 备注
-
-- 当前拆分刻意把“运行时对齐”和“caller 语义切换”分开，以降低一次性变更风险。
-- 其中第 6 个子任务被标记为 `HITL`，不是因为无法实现，而是因为它最可能影响业务/集成预期，应当在落地前再次确认。
+1. **是否要合约可组合性**（决定 subtask 6/8 做不做）
+2. #332 何时合入 main；`precompile-integration-v2` 何时/是否合入 main
+3. 若做 subtask 6：gating 机制（param 开关 vs 升级高度）
 
 ## Related
+
 - [[Moca 预编译合约切换到 Cosmos EVM 原生模式计划]]
+- [[Moca 预编译迁移前测试基线实施计划]]
 - [[Tasks Index]]
 - [[Topic Index]]
 - [[Language Index]]

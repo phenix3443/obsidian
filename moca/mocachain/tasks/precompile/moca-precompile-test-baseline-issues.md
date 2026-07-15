@@ -47,6 +47,7 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-issues.md"
 - **Title**: 建立 bank precompile 基线测试
 - **Type**: AFK
 - **Blocked by**: None - can start immediately
+- **Progress**: 基线 commit `2ec1079d` 曾从主干丢失，已在分支 `precompile/bank-baseline` 重建（并修掉当前 lint gate 报的两处问题），开 PR #333 合入 `precompile-integration`；待三基线合并后随矩阵关闭。
 - **User stories covered**:
   - 作为迁移执行者，我需要先固定 `bank.send` 的当前行为，避免后续运行时迁移打坏余额语义
   - 作为审计者，我需要看到 `RejectValue`、`EOA-only` 和失败不改余额的明确断言
@@ -61,10 +62,10 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-issues.md"
 
 **Acceptance criteria**
 
-- [ ] `bank` 目录下存在 `send` 的真实 EVM dispatch 成功测试
-- [ ] 明确存在一条 `EOA-only` 历史行为测试，断言错误来自 caller 不一致
-- [ ] 明确存在一条失败路径测试，断言 sender / receiver 余额未被污染
-- [ ] `go test ./x/evm/precompiles/bank -count=1` 通过
+- [x] `bank` 目录下存在 `send` 的真实 EVM dispatch 成功测试
+- [x] 明确存在一条 `EOA-only` 历史行为测试，断言错误来自 caller 不一致
+- [x] 明确存在一条失败路径测试，断言 sender / receiver 余额未被污染
+- [x] `go test ./x/evm/precompiles/bank -count=1` 通过
 
 ### 2. 扩展 storageprovider precompile 基线测试
 
@@ -85,10 +86,12 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-issues.md"
 
 **Acceptance criteria**
 
-- [ ] `storageprovider` 现有 EVM apply 成功路径继续保留
-- [ ] 新增一条 `EOA-only` 历史行为测试
-- [ ] 新增一条失败路径测试，断言 SP price 未发生状态污染
-- [ ] `go test ./x/evm/precompiles/storageprovider -count=1` 通过
+- [x] `storageprovider` 现有 EVM apply 成功路径继续保留（`TestUpdateSPPrice_EVMApply` 未动）
+- [x] 新增一条 `EOA-only` 历史行为测试（`TestUpdateSPPrice_RejectsContractForwarding`）
+- [x] 新增一条失败路径测试，断言 SP price 未发生状态污染（`TestUpdateSPPrice_FailureDoesNotMutateState`）
+- [x] `go test ./x/evm/precompiles/storageprovider -count=1` 通过
+
+> 落地于分支 `precompile/storageprovider-baseline`，PR #334。
 
 ### 3. 建立 storage precompile 基线测试
 
@@ -112,11 +115,13 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-issues.md"
 
 **Acceptance criteria**
 
-- [ ] `storage` 至少有一条真实 EVM dispatch 成功测试
-- [ ] 明确存在一条 `EOA-only` 历史行为测试
-- [ ] 明确存在一条失败路径测试，断言链上状态未被污染
-- [ ] 选择的 storage 方法和替换理由有文档记录
-- [ ] `go test ./x/evm/precompiles/storage -count=1` 通过
+- [x] `storage` 至少有一条真实 EVM dispatch 成功测试（`TestCreateGroup_EVMDispatchSuccess`）
+- [x] 明确存在一条 `EOA-only` 历史行为测试（`TestCreateGroup_RejectsContractForwarding`）
+- [x] 明确存在一条失败路径测试，断言链上状态未被污染（`TestCreateGroup_FailureDoesNotMutateState`，重复 group 名触发 keeper 级失败并回滚）
+- [x] 选择的 storage 方法和替换理由有文档记录（改用 `createGroup` 而非 `createBucket`，理由见测试文件头与 PR #335：createBucket 成功 fixture 需 SP+虚拟组+payment+approval 签名，过重）
+- [x] `go test ./x/evm/precompiles/storage -count=1` 通过
+
+> 落地于分支 `precompile/storage-baseline`，PR #335。补充：`createGroup` 内部 mint 需要 control-hub 账户（`0x…dead`）存在，测试在 SetupTest 里注册该账户作为 fixture（不改生产码）。
 
 ### 4. 验证测试矩阵并回写父计划
 
@@ -140,10 +145,12 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-issues.md"
 
 **Acceptance criteria**
 
-- [ ] `go test ./x/evm/precompiles/bank ./x/evm/precompiles/storageprovider ./x/evm/precompiles/storage -count=1` 通过
-- [ ] `go test ./x/evm/precompiles/... -count=1` 通过
-- [ ] 父计划文档同步记录实际覆盖矩阵
-- [ ] 子任务 0 的完成条件可以被明确勾选，而不是靠口头判断
+- [x] `go test ./x/evm/precompiles/bank ./x/evm/precompiles/storageprovider ./x/evm/precompiles/storage -count=1` 通过（在本地把三条基线分支八爪合并后验证，全绿）
+- [x] `go test ./x/evm/precompiles/... -count=1` 通过（同上，全部 package 绿，无跨包破坏）
+- [x] 父计划文档同步记录实际覆盖矩阵（见 [[Moca 预编译迁移前测试基线实施计划]] 的 Current Progress / 覆盖矩阵）
+- [x] 子任务 0 的完成条件可以被明确勾选，而不是靠口头判断
+
+> 说明：三条基线分支尚未合并进 `precompile-integration`（等同事审核 PR #333/#334/#335）。上面的矩阵验证是在本地临时八爪合并的集成态跑的；官方的合并后 sweep 需在三 PR 合并后于 `precompile-integration` 上再跑一次。
 
 ## 推荐依赖关系
 

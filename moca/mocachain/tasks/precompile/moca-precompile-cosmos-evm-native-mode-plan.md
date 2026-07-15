@@ -280,6 +280,19 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-plan.md"
 - 这是迁移过渡态
 - 不是最终实现
 
+任何兼容开关都必须是确定性的链上参数或由升级处理器写入的状态，不能依赖节点本地配置；否则同一笔交易可能在不同节点得到不同结果。
+
+### 决策 4：caller 语义变更必须作为链升级交付
+
+`Run/Execute`、余额同步和 caller 鉴权都会改变共识执行路径。尤其是从 `EOA-only` 改为允许合约调用、从 `evm.Origin` 改为 direct caller，会改变已部署合约交易的执行结果；它们不是普通重构。
+
+允许合约调用只能在明确的链升级中启用。升级交付必须定义：
+
+- 升级高度、二进制版本和对应的升级 handler
+- 兼容策略：升级前保持历史行为，升级高度后才切换新 caller 语义
+- 主网前的 fork/replay 验证，以及升级失败时的停止和回滚处置
+- 面向 SDK、CLI 和合约集成方的行为变更说明
+
 ## 建议拆分的实施任务
 
 ### Task 0：建立迁移前测试基线
@@ -350,8 +363,8 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-plan.md"
 完成标准：
 
 - 统一接入原生执行模型
-- 清理 EOA-only 分支
-- 定义 direct caller 身份语义
+- 保持当前 `EOA-only` caller 行为不变
+- 为后续 direct caller 切换保留按模块审计的身份字段清单
 
 ### Task 4：迁移 gov/authz/staking/distribution/slashing/permission/virtualgroup
 
@@ -387,6 +400,20 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-plan.md"
 - 带 native value 调用应失败
 - 多层嵌套调用 / revert / out-of-gas
 - 事件日志和余额同步
+
+### Task 7：准备并执行 caller 语义链升级
+
+前置条件：
+
+- 所有 precompile 已完成原生运行时迁移
+- 内部 keeper EVM 调用层已经验证其 `stateDB`、`commit` 与 `callFromPrecompile` 边界
+- direct caller 语义已完成 HITL 确认
+
+完成标准：
+
+- 升级 handler、升级高度和版本兼容策略已确定，且行为开关不依赖节点本地配置
+- 升级前后分别验证 EOA、合约转调、内部 keeper 调用、revert 与余额同步
+- 已执行测试网或本地 fork/replay 升级演练，并发布 SDK、CLI 与合约集成方迁移说明
 
 ## 需要重点验证的问题
 
@@ -454,6 +481,7 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-plan.md"
 5. caller 语义、Cosmos msg sender 语义、事件语义均有明确文档和测试
 6. `RejectValue(contract)` 仍然保留
 7. 相关单测、集成测试、EVM 调用测试全部通过
+8. caller 语义变更已通过明确的链升级交付，而非节点本地配置或隐式行为变化
 
 ## 不在本任务范围内
 
@@ -471,10 +499,11 @@ source_path: "tasks/precompile/moca-precompile-cosmos-evm-native-mode-plan.md"
 2. 抽公共原生基类
 3. 迁移 `bank`
 4. 验证 balance handler 行为
-5. 迁移 `storage` / `payment` / `storageprovider`
-6. 迁移其余模块
-7. 删除历史 EOA-only 兼容路径
-8. 收口测试与文档
+5. 迁移 `storage` / `payment` / `storageprovider`，保持 EOA-only 行为
+6. 迁移其余模块，保持 EOA-only 行为
+7. 重构并验证内部 keeper EVM 调用层
+8. 完成 direct caller 语义的 HITL 确认与测试矩阵
+9. 准备并执行 caller 语义链升级
 
 ## 风险说明
 

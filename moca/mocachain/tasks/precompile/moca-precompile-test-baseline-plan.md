@@ -50,6 +50,36 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-plan.md"
 - 至少一组测试必须真实经过 `EvmKeeper` 和 `Params.ActiveStaticPrecompiles`。
 - 每个模块先覆盖一条最具代表性的写路径，不追求一次性铺满全部 11 个 precompile。
 
+## Current Progress
+
+三个模块的迁移前基线已全部落地，各自开 PR 合入集成分支 `precompile-integration`，等待同事审核：
+
+- `bank`：`precompile/bank-baseline`，**PR #333**。基线 commit `2ec1079d` 曾从主干丢失，已重建 `tx_test.go` + `run_value_test.go`，并修掉当前 lint gate 报的两处问题。
+- `storageprovider`：`precompile/storageprovider-baseline`，**PR #334**。保留 `TestUpdateSPPrice_EVMApply` 成功路径，新增 EOA-only 与失败不污染状态断言。
+- `storage`：`precompile/storage-baseline`，**PR #335**。改用 `createGroup`（而非 `createBucket`，见 Method Selection 更新）建立成功/EOA-only/失败三类基线。
+
+### 实际执行的覆盖矩阵
+
+```text
+bank (PR #333):
+- RejectValue（nonzero native value 拒绝）        TestRun_RejectsNonzeroValue
+- EOA-only 拒绝 contract 转调                     TestBankSend_RejectsContractForwarding
+- 真实 EvmKeeper dispatch 成功 + 余额变化          TestBankSend_EVMDispatchSuccess
+- 失败路径 sender/receiver 余额不变                TestBankSend_FailureDoesNotChangeBalances
+
+storageprovider (PR #334):
+- 真实 EVM dispatch 成功（保留）                   TestUpdateSPPrice_EVMApply
+- EOA-only 拒绝 contract 转调                     TestUpdateSPPrice_RejectsContractForwarding
+- 失败路径不污染 SP price 状态                     TestUpdateSPPrice_FailureDoesNotMutateState
+
+storage (PR #335, 方法=createGroup):
+- 真实 EVM dispatch 成功（group 创建，owner==caller） TestCreateGroup_EVMDispatchSuccess
+- EOA-only 拒绝 contract 转调                     TestCreateGroup_RejectsContractForwarding
+- 失败路径（重复 group 名）干净回滚，原 group 不变   TestCreateGroup_FailureDoesNotMutateState
+```
+
+验证：在本地把三条基线分支八爪合并后，`go test ./x/evm/precompiles/bank ./x/evm/precompiles/storageprovider ./x/evm/precompiles/storage -count=1` 与 `go test ./x/evm/precompiles/... -count=1` 全绿，无跨包破坏、无合并冲突。官方的合并后 sweep 需在三 PR 合并进 `precompile-integration` 后再跑一次。
+
 ## File Structure
 
 - Modify: `moca/x/evm/precompiles/bank/run_value_test.go`
@@ -79,8 +109,9 @@ source_path: "tasks/precompile/moca-precompile-test-baseline-plan.md"
   原因：最小但真实地覆盖余额变化、日志、副作用与失败不改余额。
 - `storageprovider`: `updateSPPrice`
   原因：已有 EVM dispatch 成功样板，可最小增量补齐 caller / readonly / revert 语义。
-- `storage`: `createBucket`
-  原因：是最核心的业务写路径之一，直接覆盖 `Creator = contract.Caller()`、事件与创建副作用。
+- `storage`: `createGroup`（原计划为 `createBucket`，实施时按 Open Risk 替换）
+  原因：`createBucket` 成功路径 fixture 过重（需注册 primary SP、global virtual group family、payment 前置、以及有效的 SP approval 签名）；`createGroup` 是确定性交易型写路径，仅需 funded creator，且同样覆盖 `Creator = contract.Caller()`、事件与创建副作用。EOA-only 守卫与 `Run` 快照/回滚是所有 storage tx 方法共用的。
+  注意：`createGroup` 内部会向 group ERC721（`0x3002`）发 mint，其 sender 为 control-hub 账户 `0x…dead`；EthSetup 精简 genesis 未建该账户，测试在 SetupTest 里注册它作为 fixture。
 
 ---
 
