@@ -27,8 +27,19 @@
   - `apps/client-core`（`@as/client-core`）：客户端共享核心
   - `packages/sdk`（`@as/sdk`）、`packages/types`（`@as/types`）：共享 SDK 与类型
   - 常用入口：`pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm type-check` / `pnpm test`（turbo 驱动）；`make setup` / `make seed` / `make dev-api` / `make dev-store` / `make dev-gui` / `make e2e`。
-  - 标准后端栈见 `docs/standard-stack.md`；部署见 `docs/DEPLOY.md`。
+  - UI 设计真源仍在主仓 `docs/ui/Agent Store.dc.html`。
 - `registry`（注册表仓）—— 每个包是单个 JSON manifest，放在 `mcp/<slug>.json`、`skill/<slug>.json`、`provider/<slug>.json`，schema 见 `schema/package.schema.json`。本地校验：`bun scripts/validate.ts`（离线只校验结构用 `CHECK_URLS=0`）。改动通过 PR 合并后同步上线。
+
+### 本 workspace 内的参考文档
+
+从主仓迁入、沉淀在本 vault 的知识/运维文档（`agent-store/docs/` 与容器根）：
+
+- `docs/standard-stack.md`：标准后端栈选型与约定（所有独立产品复用）。
+- `docs/独立开发者快速部署最佳实践-2026.md`：部署方法论。
+- `docs/DEPLOY.md`：agent-store 部署步骤。
+- `docs/LAUNCH.md`、`docs/LAUNCH-COPY.md`、`docs/DEMO-SCRIPT.md`：发布计划、文案、演示脚本。
+- `docs/codex-claude-shared-guidance-design.md`：Codex/Claude 共享 guidance 与 skill 布局设计（AGENTS.md 为真源、CLAUDE.md 软链的由来）。
+- `todo.md`：需人工操作的清单（代码签名、Waffo 收款、桌面登录验证等）。
 
 ### 主仓已有的专属规则以主仓 AGENTS.md 为准
 
