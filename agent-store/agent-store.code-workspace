@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "name": "obsidian",
+      "path": ".",
+    },
+    {
+      "path": "../../../awesome-agent-store/agent-store",
+    },
+    {
+      "path": "../../../awesome-agent-store/registry",
+    },
+  ],
+  "settings": {},
+}
