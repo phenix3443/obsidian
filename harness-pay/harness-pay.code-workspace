@@ -1,0 +1,18 @@
+{
+  "folders": [
+    {
+      "name": "obsidian",
+      "path": ".",
+    },
+    {
+      "path": "../../../zkme/harness-backend",
+    },
+    {
+      "path": "../../../zkme/harness-dashboard",
+    },
+    {
+      "path": "../../../zkme/harness-sdk",
+    },
+  ],
+  "settings": {},
+}
