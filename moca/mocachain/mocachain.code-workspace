@@ -5,10 +5,6 @@
       "path": "..",
     },
     {
-      "name": "go-ethereum",
-      "path": "../../../../mocachain/go-ethereum",
-    },
-    {
       "name": "moca",
       "path": "../../../../mocachain/moca",
     },
@@ -25,10 +21,6 @@
       "path": "../../../../mocachain/moca-cometbft",
     },
     {
-      "name": "moca-cometbft-db",
-      "path": "../../../../mocachain/moca-cometbft-db",
-    },
-    {
       "name": "moca-common",
       "path": "../../../../mocachain/moca-common",
     },
@@ -41,24 +33,8 @@
       "path": "../../../../mocachain/moca-go-sdk",
     },
     {
-      "name": "moca-iavl",
-      "path": "../../../../mocachain/moca-iavl",
-    },
-    {
-      "name": "moca-ibc-go",
-      "path": "../../../../mocachain/moca-ibc-go",
-    },
-    {
       "name": "moca-juno",
       "path": "../../../../mocachain/moca-juno",
-    },
-    {
-      "name": "moca-callisto",
-      "path": "../../../../mocachain/moca-callisto",
-    },
-    {
-      "name": "moca-callisto-juno",
-      "path": "../../../../mocachain/moca-callisto-juno",
     },
     {
       "name": "moca-devcontainer",
